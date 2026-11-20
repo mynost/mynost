@@ -1,0 +1,100 @@
+name: Refresh dashboard quote cache
+on:
+  schedule:
+    - cron: '8,23,38,53 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dashboard-quote-cache.yml'
+permissions:
+  contents: write
+concurrency:
+  group: dashboard-quote-cache
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch public market data
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, math, time, urllib.request, pathlib, concurrent.futures
+          keys = ('BTC','ETH','SOL','XRP','ZEC','OP','HYPE')
+          ids = dict(BTC='bitcoin',ETH='ethereum',SOL='solana',XRP='ripple',ZEC='zcash',OP='optimism',HYPE='hyperliquid')
+          def now(): return int(time.time()*1000)
+          def req(url, data=None):
+              headers = {'User-Agent':'DashboardQuoteCache/2.0','Accept':'application/json'}
+              if data is not None: headers['Content-Type']='application/json'
+              r = urllib.request.Request(url, data=json.dumps(data).encode() if data is not None else None, headers=headers)
+              with urllib.request.urlopen(r, timeout=9) as x: return json.load(x)
+          def px(v):
+              try: return math.isfinite(float(v)) and float(v)>0
+              except (ValueError,TypeError): return False
+          def q(v,src,at=None,kind='perp'):
+              return dict(price=float(v),src=src,at=int(at or now()),kind=kind)
+          def hl(dex=''):
+              b={'type':'metaAndAssetCtxs'}
+              if dex: b['dex']=dex
+              m,c=req('https://api.hyperliquid.xyz/info',b)
+              out={}
+              for asset,ctx in zip(m['universe'],c):
+                  k=asset['name']
+                  if dex and k not in ('SPCX','xyz:SPCX'): continue
+                  if not dex and k not in keys: continue
+                  use_mid=px(ctx.get('midPx'))
+                  v=ctx.get('midPx') if use_mid else ctx.get('markPx')
+                  if px(v): out['SPCX' if dex else k]=q(v,'Hyperliquid '+k+(' 中间价' if use_mid else ' 标记价'))
+              return out
+          def okx():
+              r=req('https://www.okx.com/api/v5/market/tickers?instType=SWAP')
+              if r.get('code')!='0': raise ValueError(r.get('msg','API error'))
+              return {k:q(t['last'],'OKX 永续成交价',t['ts']) for t in r['data'] for k in keys if t.get('instId')==k+'-USDT-SWAP' and px(t.get('last')) and abs(now()-int(t['ts']))<900000}
+          def bybit():
+              r=req('https://api.bybit.com/v5/market/tickers?category=linear')
+              if r.get('retCode')!=0: raise ValueError(r.get('retMsg','API error'))
+              return {k:q(t['lastPrice'],'Bybit 永续成交价',r.get('time')) for t in r['result']['list'] for k in keys if t.get('symbol')==k+'USDT' and px(t.get('lastPrice'))}
+          def binance():
+              r=req('https://fapi.binance.com/fapi/v2/ticker/price')
+              return {k:q(t['price'],'Binance 永续成交价',t.get('time')) for t in r for k in keys if t.get('symbol')==k+'USDT' and px(t.get('price')) and (not t.get('time') or abs(now()-int(t['time']))<900000)}
+          def gecko():
+              r=req('https://api.coingecko.com/api/v3/simple/price?ids='+','.join(ids.values())+'&vs_currencies=usd&include_last_updated_at=true')
+              out={}
+              for k,id in ids.items():
+                  t=r.get(id,{})
+                  at=int(t.get('last_updated_at') or 0)*1000
+                  if px(t.get('usd')) and at and abs(now()-at)<900000: out[k]=q(t['usd'],'CoinGecko 现货参考',at,'spot')
+              return out
+          funcs=[('Hyperliquid',hl),('SPCX',lambda:hl('xyz')),('OKX',okx),('Bybit',bybit),('Binance',binance),('CoinGecko',gecko)]
+          quotes={}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
+              jobs=[(name,ex.submit(fn)) for name,fn in funcs]
+              for name,job in jobs:
+                  try:
+                      result=job.result()
+                      print(name, len(result),'quotes:',','.join(result))
+                      for k,v in result.items(): quotes.setdefault(k,v)
+                  except Exception as e: print(name,'failed:',str(e)[:250])
+          target=pathlib.Path('crypto-short-dashboard/quotes.json')
+          if not quotes: raise SystemExit('No valid fresh quotes; existing file preserved')
+          old={}
+          try: old=json.loads(target.read_text()).get('quotes',{})
+          except Exception: pass
+          for k,v in old.items():
+              if k not in quotes and now()-v.get('at',0)<35*60000: quotes[k]=v
+          target.write_text(json.dumps({'generatedAt':now(),'quotes':quotes},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print('Fresh/retained symbols:',','.join(sorted(quotes)))
+          PY
+      - name: Save timestamped quote cache
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crypto-short-dashboard/quotes.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Refresh public dashboard quote cache"
+          git pull --rebase origin main
+          git push origin main
