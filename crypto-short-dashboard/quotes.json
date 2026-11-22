@@ -1,52 +1,52 @@
 {
-  "generatedAt": 1795342692630,
+  "generatedAt": 1795370069624,
   "quotes": {
     "BTC": {
-      "price": 60907.5,
+      "price": 60846.5,
       "src": "Hyperliquid BTC 中间价",
-      "at": 1795342692629,
+      "at": 1795370069623,
       "kind": "perp"
     },
     "ETH": {
-      "price": 1712.25,
+      "price": 1715.65,
       "src": "Hyperliquid ETH 中间价",
-      "at": 1795342692629,
+      "at": 1795370069623,
       "kind": "perp"
     },
     "SOL": {
-      "price": 70.5405,
+      "price": 70.4555,
       "src": "Hyperliquid SOL 中间价",
-      "at": 1795342692629,
+      "at": 1795370069623,
       "kind": "perp"
     },
     "OP": {
-      "price": 0.07166,
+      "price": 0.07144,
       "src": "Hyperliquid OP 中间价",
-      "at": 1795342692629,
+      "at": 1795370069623,
       "kind": "perp"
     },
     "XRP": {
-      "price": 0.93358,
+      "price": 0.928205,
       "src": "Hyperliquid XRP 中间价",
-      "at": 1795342692629,
+      "at": 1795370069623,
       "kind": "perp"
     },
     "HYPE": {
-      "price": 62.351,
+      "price": 63.1215,
       "src": "Hyperliquid HYPE 中间价",
-      "at": 1795342692629,
+      "at": 1795370069623,
       "kind": "perp"
     },
     "ZEC": {
-      "price": 801.75,
+      "price": 797.375,
       "src": "Hyperliquid ZEC 中间价",
-      "at": 1795342692629,
+      "at": 1795370069623,
       "kind": "perp"
     },
     "SPCX": {
-      "price": 130.525,
+      "price": 130.625,
       "src": "Hyperliquid xyz:SPCX 中间价",
-      "at": 1795342692458,
+      "at": 1795370069409,
       "kind": "perp"
     }
   }
